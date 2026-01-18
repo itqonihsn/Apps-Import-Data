@@ -78,15 +78,28 @@ async function sendToN8N(
 
   try {
     // Get headers from form-data (includes Content-Type with boundary)
-    // form-data package works in both local development and production
     const headers = formData.getHeaders()
     
-    // Use form-data stream directly - compatible with Node.js fetch (18+)
-    // This works in both local dev (npm run dev) and production (Vercel/server)
+    // Convert form-data stream to buffer for better compatibility with fetch
+    // This is necessary for serverless environments like Vercel
+    const streamToBuffer = (stream: FormData): Promise<Buffer> => {
+      return new Promise((resolve, reject) => {
+        const chunks: Buffer[] = []
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+        stream.on('end', () => resolve(Buffer.concat(chunks)))
+        stream.on('error', reject)
+      })
+    }
+    
+    const formDataBuffer = await streamToBuffer(formData)
+    
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      headers: headers,
-      body: formData as unknown as BodyInit, // Type assertion for form-data stream
+      headers: {
+        ...headers,
+        'Content-Length': formDataBuffer.length.toString(),
+      },
+      body: formDataBuffer as unknown as BodyInit, // Buffer is compatible with fetch body
     })
 
     if (!response.ok) {
