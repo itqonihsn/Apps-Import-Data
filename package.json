@@ -1,0 +1,25 @@
+{
+  "name": "sales-import-app",
+  "version": "1.0.0",
+  "description": "Sales data import application for Shopee, TikTok, and Lazada",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "axios": "^1.6.0",
+    "papaparse": "^5.4.1",
+    "formidable": "^3.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  }
+}

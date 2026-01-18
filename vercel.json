@@ -1,0 +1,15 @@
+/* vercel.json */
+{
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_API_URL": {
+      "description": "API URL for the application"
+    },
+    "N8N_WEBHOOK_URL": {
+      "description": "n8n webhook URL for data import"
+    }
+  }
+}
