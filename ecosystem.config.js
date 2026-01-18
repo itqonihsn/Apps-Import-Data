@@ -1,6 +1,4 @@
-#!/bin/bash
-# ecosystem.config.js - PM2 Configuration for production
-
+// ecosystem.config.js - PM2 Configuration for production
 module.exports = {
   apps: [
     {

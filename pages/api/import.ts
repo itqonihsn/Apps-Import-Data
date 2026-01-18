@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { parseCSV, validateCSVStructure } from '@/lib/csvParser'
 import { IncomingForm } from 'formidable'
 import fs from 'fs/promises'
+import FormData from 'form-data'
 
 interface ImportResponse {
   success?: boolean
@@ -48,12 +49,15 @@ async function sendToN8N(
     throw new Error('N8N_WEBHOOK_URL environment variable tidak dikonfigurasi')
   }
 
-  // Create FormData untuk kirim file + metadata
+  // Create FormData untuk kirim file + metadata (Node.js compatible)
   const formData = new FormData()
   
-  // Add CSV file as blob - ORIGINAL content without any modification
-  const csvBlob = new Blob([csvContent], { type: 'text/csv;charset=utf-8' })
-  formData.append('csvFile', csvBlob, `import_${dataType}_${Date.now()}.csv`)
+  // Add CSV file as buffer - ORIGINAL content without any modification
+  const csvBuffer = Buffer.from(csvContent, 'utf-8')
+  formData.append('csvFile', csvBuffer, {
+    filename: `import_${dataType}_${Date.now()}.csv`,
+    contentType: 'text/csv;charset=utf-8',
+  })
   
   // Add metadata dengan timestamp WIB
   formData.append('timestamp', getCurrentTimeWIB())
@@ -73,9 +77,16 @@ async function sendToN8N(
   console.log(`[N8N] Timestamp: ${getCurrentTimeWIB()} (WIB)`)
 
   try {
+    // Get headers from form-data (includes Content-Type with boundary)
+    // form-data package works in both local development and production
+    const headers = formData.getHeaders()
+    
+    // Use form-data stream directly - compatible with Node.js fetch (18+)
+    // This works in both local dev (npm run dev) and production (Vercel/server)
     const response = await fetch(webhookUrl, {
       method: 'POST',
-      body: formData,
+      headers: headers,
+      body: formData as unknown as BodyInit, // Type assertion for form-data stream
     })
 
     if (!response.ok) {
