@@ -29,11 +29,12 @@ export default function ConfirmationModal({
 }: ConfirmationModalProps) {
   if (!isOpen) return null
 
-  const dataTypeLabel = {
+  const dataTypeLabels: Record<string, string> = {
     order: 'Data Order',
     withdrawal: 'Data Penarikan',
     balance: 'Data Saldo',
-  }[dataType as keyof typeof dataTypeLabel] || dataType
+  }
+  const dataTypeLabel = dataTypeLabels[dataType] || dataType
 
   return (
     <>
