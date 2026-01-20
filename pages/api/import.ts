@@ -4,6 +4,7 @@ import { parseCSV, validateCSVStructure } from '@/lib/csvParser'
 import { IncomingForm } from 'formidable'
 import fs from 'fs/promises'
 import FormData from 'form-data'
+import { PassThrough } from 'stream'
 
 interface ImportResponse {
   success?: boolean
@@ -46,8 +47,11 @@ async function sendToN8N(
   const webhookUrl = process.env.N8N_WEBHOOK_URL
 
   if (!webhookUrl) {
+    console.error('[N8N] N8N_WEBHOOK_URL environment variable tidak dikonfigurasi')
     throw new Error('N8N_WEBHOOK_URL environment variable tidak dikonfigurasi')
   }
+  
+  console.log(`[N8N] Webhook URL configured: ${webhookUrl.substring(0, 50)}...`)
 
   // Create FormData untuk kirim file + metadata (Node.js compatible)
   const formData = new FormData()
@@ -80,80 +84,62 @@ async function sendToN8N(
     // Get headers from form-data (includes Content-Type with boundary)
     const headers = formData.getHeaders()
     
-    // Convert FormData stream to buffer - kompatibel dengan Vercel serverless
-    // FormData dari 'form-data' package adalah PassThrough stream
+    // Convert FormData to buffer menggunakan pendekatan yang lebih reliable
+    // Menggunakan PassThrough stream untuk kompatibilitas Vercel
     const formDataBuffer = await new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = []
-      let hasEnded = false
-      let streamError: Error | null = null
+      const passThrough = new PassThrough()
+      let hasResolved = false
       
-      // Setup event listeners
-      formData.on('data', (chunk: Buffer) => {
-        if (!hasEnded) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      // Pipe FormData ke PassThrough untuk capture data
+      formData.pipe(passThrough)
+      
+      passThrough.on('data', (chunk: Buffer) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      })
+      
+      passThrough.on('end', () => {
+        if (!hasResolved) {
+          hasResolved = true
+          resolve(Buffer.concat(chunks))
         }
       })
       
-      formData.on('end', () => {
-        if (!hasEnded) {
-          hasEnded = true
-          if (streamError) {
-            reject(streamError)
-          } else {
-            resolve(Buffer.concat(chunks))
-          }
-        }
-      })
-      
-      formData.on('error', (error: Error) => {
-        streamError = error
-        if (!hasEnded) {
-          hasEnded = true
+      passThrough.on('error', (error: Error) => {
+        if (!hasResolved) {
+          hasResolved = true
           reject(error)
         }
       })
       
-      // Trigger stream untuk mulai membaca
-      // FormData perlu di-resume untuk mulai streaming
-      try {
-        if (typeof (formData as any).resume === 'function') {
-          (formData as any).resume()
+      formData.on('error', (error: Error) => {
+        if (!hasResolved) {
+          hasResolved = true
+          reject(error)
         }
-        // Juga coba pipe ke null untuk trigger stream
-        if (typeof (formData as any).pipe === 'function') {
-          // FormData akan emit data events ketika di-resume
-        }
-      } catch (triggerError) {
-        // Ignore trigger errors, stream might already be active
-      }
+      })
       
-      // Safety timeout: jika tidak ada data setelah 5 detik, reject
-      const timeoutId = setTimeout(() => {
-        if (!hasEnded && chunks.length === 0) {
-          hasEnded = true
+      // Safety timeout
+      setTimeout(() => {
+        if (!hasResolved && chunks.length === 0) {
+          hasResolved = true
           reject(new Error('FormData stream timeout - no data received after 5 seconds'))
         }
       }, 5000)
-      
-      // Clear timeout jika stream berhasil
-      formData.once('data', () => {
-        clearTimeout(timeoutId)
-      })
-      
-      formData.once('end', () => {
-        clearTimeout(timeoutId)
-      })
     })
     
     console.log(`[N8N] FormData buffer size: ${(formDataBuffer.length / 1024).toFixed(2)} KB`)
+    console.log(`[N8N] Webhook URL: ${webhookUrl}`)
     
-    // Add timeout untuk request ke n8n (10 detik)
+    // Add timeout untuk request ke n8n (15 detik untuk testing)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => {
       controller.abort()
-    }, 10000) // 10 detik timeout
+    }, 15000) // 15 detik timeout untuk testing
     
     try {
+      console.log(`[N8N] Sending request to n8n webhook...`)
+      
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
@@ -166,8 +152,11 @@ async function sendToN8N(
 
       clearTimeout(timeoutId)
 
+      console.log(`[N8N] Response status: ${response.status} ${response.statusText}`)
+
       if (!response.ok) {
         const errorText = await response.text().catch(() => 'Unknown error')
+        console.error(`[N8N] Error response: ${errorText}`)
         throw new Error(`N8N webhook failed: ${response.statusText} (${response.status}) - ${errorText}`)
       }
 
@@ -177,8 +166,11 @@ async function sendToN8N(
       clearTimeout(timeoutId)
       
       if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        throw new Error('Request ke n8n timeout setelah 10 detik')
+        console.error(`[N8N] Request timeout after 15 seconds`)
+        throw new Error('Request ke n8n timeout setelah 15 detik')
       }
+      
+      console.error(`[N8N] Fetch error:`, fetchError)
       throw fetchError
     }
   } catch (error) {
