@@ -80,35 +80,67 @@ async function sendToN8N(
     // Get headers from form-data (includes Content-Type with boundary)
     const headers = formData.getHeaders()
     
-    // Convert form-data stream to buffer for better compatibility with fetch
-    // This is necessary for serverless environments like Vercel
-    const streamToBuffer = (stream: FormData): Promise<Buffer> => {
-      return new Promise((resolve, reject) => {
-        const chunks: Buffer[] = []
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-        stream.on('end', () => resolve(Buffer.concat(chunks)))
-        stream.on('error', reject)
+    // Convert FormData stream to buffer dengan cara yang benar
+    // FormData dari 'form-data' package adalah PassThrough stream
+    const formDataBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const chunks: Buffer[] = []
+      
+      // FormData extends PassThrough stream, jadi bisa langsung digunakan
+      formData.on('data', (chunk: Buffer) => {
+        chunks.push(chunk)
       })
-    }
-    
-    const formDataBuffer = await streamToBuffer(formData)
-    
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Length': formDataBuffer.length.toString(),
-      },
-      body: formDataBuffer as unknown as BodyInit, // Buffer is compatible with fetch body
+      
+      formData.on('end', () => {
+        resolve(Buffer.concat(chunks))
+      })
+      
+      formData.on('error', (error: Error) => {
+        reject(error)
+      })
+      
+      // Pastikan stream mulai membaca
+      // FormData perlu di-trigger untuk mulai streaming
+      if (typeof (formData as any).resume === 'function') {
+        (formData as any).resume()
+      }
     })
+    
+    console.log(`[N8N] FormData buffer size: ${(formDataBuffer.length / 1024).toFixed(2)} KB`)
+    
+    // Add timeout untuk request ke n8n (10 detik)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, 10000) // 10 detik timeout
+    
+    try {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Length': formDataBuffer.length.toString(),
+        },
+        body: formDataBuffer,
+        signal: controller.signal,
+      })
 
-    if (!response.ok) {
-      throw new Error(`N8N webhook failed: ${response.statusText} (${response.status})`)
+      clearTimeout(timeoutId)
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`N8N webhook failed: ${response.statusText} (${response.status}) - ${errorText}`)
+      }
+
+      const responseText = await response.text()
+      console.log(`[N8N] CSV file sent successfully to n8n webhook. Response: ${responseText}`)
+    } catch (fetchError) {
+      clearTimeout(timeoutId)
+      
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('Request ke n8n timeout setelah 10 detik')
+      }
+      throw fetchError
     }
-
-    console.log(
-      `[N8N] CSV file sent successfully to n8n webhook`
-    )
   } catch (error) {
     console.error(`[N8N] Error sending CSV:`, error)
     throw error
@@ -166,7 +198,7 @@ export default async function handler(
     }
 
     // Build callback URL
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://apps-import-data.vercel.app'
     const callbackUrl = `${apiUrl}/api/import-callback`
 
     // Send CSV file directly to n8n (not JSON)
