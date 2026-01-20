@@ -174,6 +174,22 @@
 .successIcon {
   font-size: 64px;
   margin-bottom: 20px;
+  line-height: 1;
+}
+
+.successIcon.thankYou {
+  font-size: 72px;
+  margin-bottom: 24px;
+  animation: bounce 0.6s ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 .modalTitle {

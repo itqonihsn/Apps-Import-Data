@@ -48,17 +48,18 @@ export default function SuccessModal({
       <div className={styles.overlay} onClick={handleCloseThankYou}>
         <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
           <div className={styles.modalContent}>
-            <div className={styles.successIcon}>😊 ❤️</div>
-            <h2 className={styles.modalTitle}>Terima Kasih!</h2>
-            <p className={styles.modalMessage}>
+            <div className={`${styles.successIcon} ${styles.thankYou}`}>😊 ❤️</div>
+            <h2 className={styles.modalTitle} style={{ color: '#22c55e' }}>Terima Kasih!</h2>
+            <p className={styles.modalMessage} style={{ fontSize: '18px', lineHeight: '1.8' }}>
               Terima kasih sudah import data hari ini, selamat menjalani kegiatan selanjutnya 😊 ❤️
             </p>
             
-            <div className={styles.modalActions}>
+            <div className={styles.modalActions} style={{ marginTop: '32px' }}>
               <button
                 type="button"
                 onClick={handleCloseThankYou}
                 className={styles.confirmButton}
+                style={{ width: '100%', maxWidth: '200px' }}
               >
                 Tutup
               </button>
