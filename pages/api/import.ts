@@ -50,7 +50,8 @@ async function sendToN8N(
   branch: string,
   dataType: string,
   recordCount: number,
-  callbackUrl: string
+  callbackUrl: string,
+  sessionId: string
 ): Promise<void> {
   const webhookUrl = process.env.N8N_WEBHOOK_URL
 
@@ -79,6 +80,7 @@ async function sendToN8N(
   formData.append('dataType', dataType)
   formData.append('recordCount', recordCount.toString())
   formData.append('callbackUrl', callbackUrl)
+  formData.append('sessionId', sessionId) // KIRIM sessionId ke n8n
 
   const payloadSize = (csvContent.length / 1024 / 1024).toFixed(2)
   console.log(
@@ -86,6 +88,7 @@ async function sendToN8N(
   )
   console.log(`[N8N] Metadata: Platform=${platform}, Brand=${brand}, Branch=${branch}, DataType=${dataType}`)
   console.log(`[N8N] Callback URL: ${callbackUrl}`)
+  console.log(`[N8N] SessionId: ${sessionId}`)
   console.log(`[N8N] Timestamp: ${getCurrentTimeWIB()} (WIB)`)
 
   try {
@@ -194,19 +197,20 @@ export default async function handler(
       : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000')
     const callbackUrl = `${apiUrl}/api/import-callback`
     
-    console.log(`[Import] Environment: ${isProduction ? 'Production' : 'Development'}`)
-    console.log(`[Import] Callback URL: ${callbackUrl}`)
-
-    // Send CSV file directly to n8n (not JSON)
-    // n8n akan handle parsing CSV sendiri
-    await sendToN8N(fileContent, platform, brand, branch, dataType, csvRecords.length, callbackUrl)
-
     // Generate session ID untuk tracking callback status
     // Format: timestamp-platform-brand-branch (sanitized)
+    // PENTING: Generate SEBELUM kirim ke n8n, agar bisa dikirim bersama data
     const timestamp = Date.now()
     const sessionId = `${timestamp}-${platform}-${brand}-${branch}`.replace(/[^a-zA-Z0-9-]/g, '-')
     
+    console.log(`[Import] Environment: ${isProduction ? 'Production' : 'Development'}`)
+    console.log(`[Import] Callback URL: ${callbackUrl}`)
     console.log(`[Import] Generated sessionId: ${sessionId}`)
+
+    // Send CSV file directly to n8n (not JSON)
+    // n8n akan handle parsing CSV sendiri
+    // KIRIM sessionId ke n8n agar bisa digunakan untuk callback
+    await sendToN8N(fileContent, platform, brand, branch, dataType, csvRecords.length, callbackUrl, sessionId)
 
     // Return success response dengan sessionId
     return res.status(200).json({
