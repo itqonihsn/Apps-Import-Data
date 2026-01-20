@@ -178,8 +178,16 @@ export default async function handler(
     }
 
     // Build callback URL
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://apps-import-data.vercel.app'
+    // Di production (Vercel), gunakan production URL
+    // Di development, gunakan localhost
+    const isProduction = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production'
+    const apiUrl = isProduction 
+      ? (process.env.NEXT_PUBLIC_API_URL || 'https://apps-import-data.vercel.app')
+      : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000')
     const callbackUrl = `${apiUrl}/api/import-callback`
+    
+    console.log(`[Import] Environment: ${isProduction ? 'Production' : 'Development'}`)
+    console.log(`[Import] Callback URL: ${callbackUrl}`)
 
     // Send CSV file directly to n8n (not JSON)
     // n8n akan handle parsing CSV sendiri
