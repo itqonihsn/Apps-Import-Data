@@ -80,29 +80,69 @@ async function sendToN8N(
     // Get headers from form-data (includes Content-Type with boundary)
     const headers = formData.getHeaders()
     
-    // Convert FormData stream to buffer dengan cara yang benar
+    // Convert FormData stream to buffer - kompatibel dengan Vercel serverless
     // FormData dari 'form-data' package adalah PassThrough stream
     const formDataBuffer = await new Promise<Buffer>((resolve, reject) => {
       const chunks: Buffer[] = []
+      let hasEnded = false
+      let streamError: Error | null = null
       
-      // FormData extends PassThrough stream, jadi bisa langsung digunakan
+      // Setup event listeners
       formData.on('data', (chunk: Buffer) => {
-        chunks.push(chunk)
+        if (!hasEnded) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+        }
       })
       
       formData.on('end', () => {
-        resolve(Buffer.concat(chunks))
+        if (!hasEnded) {
+          hasEnded = true
+          if (streamError) {
+            reject(streamError)
+          } else {
+            resolve(Buffer.concat(chunks))
+          }
+        }
       })
       
       formData.on('error', (error: Error) => {
-        reject(error)
+        streamError = error
+        if (!hasEnded) {
+          hasEnded = true
+          reject(error)
+        }
       })
       
-      // Pastikan stream mulai membaca
-      // FormData perlu di-trigger untuk mulai streaming
-      if (typeof (formData as any).resume === 'function') {
-        (formData as any).resume()
+      // Trigger stream untuk mulai membaca
+      // FormData perlu di-resume untuk mulai streaming
+      try {
+        if (typeof (formData as any).resume === 'function') {
+          (formData as any).resume()
+        }
+        // Juga coba pipe ke null untuk trigger stream
+        if (typeof (formData as any).pipe === 'function') {
+          // FormData akan emit data events ketika di-resume
+        }
+      } catch (triggerError) {
+        // Ignore trigger errors, stream might already be active
       }
+      
+      // Safety timeout: jika tidak ada data setelah 5 detik, reject
+      const timeoutId = setTimeout(() => {
+        if (!hasEnded && chunks.length === 0) {
+          hasEnded = true
+          reject(new Error('FormData stream timeout - no data received after 5 seconds'))
+        }
+      }, 5000)
+      
+      // Clear timeout jika stream berhasil
+      formData.once('data', () => {
+        clearTimeout(timeoutId)
+      })
+      
+      formData.once('end', () => {
+        clearTimeout(timeoutId)
+      })
     })
     
     console.log(`[N8N] FormData buffer size: ${(formDataBuffer.length / 1024).toFixed(2)} KB`)
