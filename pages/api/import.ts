@@ -4,7 +4,7 @@ import { parseCSV, validateCSVStructure } from '@/lib/csvParser'
 import { IncomingForm } from 'formidable'
 import fs from 'fs/promises'
 import FormData from 'form-data'
-import { PassThrough } from 'stream'
+import axios from 'axios'
 
 interface ImportResponse {
   success?: boolean
@@ -84,94 +84,42 @@ async function sendToN8N(
     // Get headers from form-data (includes Content-Type with boundary)
     const headers = formData.getHeaders()
     
-    // Convert FormData to buffer menggunakan pendekatan yang lebih reliable
-    // Menggunakan PassThrough stream untuk kompatibilitas Vercel
-    const formDataBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const chunks: Buffer[] = []
-      const passThrough = new PassThrough()
-      let hasResolved = false
-      
-      // Pipe FormData ke PassThrough untuk capture data
-      formData.pipe(passThrough)
-      
-      passThrough.on('data', (chunk: Buffer) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-      })
-      
-      passThrough.on('end', () => {
-        if (!hasResolved) {
-          hasResolved = true
-          resolve(Buffer.concat(chunks))
-        }
-      })
-      
-      passThrough.on('error', (error: Error) => {
-        if (!hasResolved) {
-          hasResolved = true
-          reject(error)
-        }
-      })
-      
-      formData.on('error', (error: Error) => {
-        if (!hasResolved) {
-          hasResolved = true
-          reject(error)
-        }
-      })
-      
-      // Safety timeout
-      setTimeout(() => {
-        if (!hasResolved && chunks.length === 0) {
-          hasResolved = true
-          reject(new Error('FormData stream timeout - no data received after 5 seconds'))
-        }
-      }, 5000)
-    })
-    
-    console.log(`[N8N] FormData buffer size: ${(formDataBuffer.length / 1024).toFixed(2)} KB`)
     console.log(`[N8N] Webhook URL: ${webhookUrl}`)
+    console.log(`[N8N] Sending request to n8n webhook using axios...`)
     
-    // Add timeout untuk request ke n8n (15 detik untuk testing)
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => {
-      controller.abort()
-    }, 15000) // 15 detik timeout untuk testing
-    
+    // Gunakan axios untuk mengirim FormData - lebih reliable di serverless environment
+    // Axios secara otomatis handle FormData stream dengan benar
     try {
-      console.log(`[N8N] Sending request to n8n webhook...`)
-      
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
+      const response = await axios.post(webhookUrl, formData, {
         headers: {
           ...headers,
-          'Content-Length': formDataBuffer.length.toString(),
         },
-        body: formDataBuffer,
-        signal: controller.signal,
+        timeout: 30000, // 30 detik timeout
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
       })
 
-      clearTimeout(timeoutId)
-
-      console.log(`[N8N] Response status: ${response.status} ${response.statusText}`)
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error')
-        console.error(`[N8N] Error response: ${errorText}`)
-        throw new Error(`N8N webhook failed: ${response.statusText} (${response.status}) - ${errorText}`)
-      }
-
-      const responseText = await response.text()
-      console.log(`[N8N] CSV file sent successfully to n8n webhook. Response: ${responseText}`)
-    } catch (fetchError) {
-      clearTimeout(timeoutId)
-      
-      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-        console.error(`[N8N] Request timeout after 15 seconds`)
-        throw new Error('Request ke n8n timeout setelah 15 detik')
+      console.log(`[N8N] Response status: ${response.status} ${response.statusText || 'OK'}`)
+      console.log(`[N8N] CSV file sent successfully to n8n webhook. Response: ${JSON.stringify(response.data)}`)
+    } catch (axiosError: any) {
+      if (axiosError.code === 'ECONNABORTED') {
+        console.error(`[N8N] Request timeout after 30 seconds`)
+        throw new Error('Request ke n8n timeout setelah 30 detik')
       }
       
-      console.error(`[N8N] Fetch error:`, fetchError)
-      throw fetchError
+      if (axiosError.response) {
+        // Server responded with error status
+        console.error(`[N8N] Error response: ${axiosError.response.status} - ${JSON.stringify(axiosError.response.data)}`)
+        throw new Error(`N8N webhook failed: ${axiosError.response.statusText} (${axiosError.response.status}) - ${JSON.stringify(axiosError.response.data)}`)
+      } else if (axiosError.request) {
+        // Request was made but no response received
+        console.error(`[N8N] No response received:`, axiosError.message)
+        throw new Error(`N8N webhook tidak merespons: ${axiosError.message}`)
+      } else {
+        // Error setting up request
+        console.error(`[N8N] Request setup error:`, axiosError.message)
+        throw new Error(`Error mengirim request ke n8n: ${axiosError.message}`)
+      }
     }
   } catch (error) {
     console.error(`[N8N] Error sending CSV:`, error)
