@@ -1,7 +1,7 @@
 // components/SuccessModal.tsx
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import styles from '@/styles/Modal.module.css'
 
 interface SuccessModalProps {
@@ -17,9 +17,12 @@ export default function SuccessModal({
   onImportAgain,
   onClose,
 }: SuccessModalProps) {
+  const [showThankYou, setShowThankYou] = useState(false)
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
+      setShowThankYou(false)
     } else {
       document.body.style.overflow = 'unset'
     }
@@ -31,10 +34,42 @@ export default function SuccessModal({
   if (!isOpen) return null
 
   const handleNo = () => {
-    alert('Terima kasih, selamat menjalani kegiatan selanjutnya 😊')
+    setShowThankYou(true)
+  }
+
+  const handleCloseThankYou = () => {
+    setShowThankYou(false)
     onClose()
   }
 
+  // Thank You Modal
+  if (showThankYou) {
+    return (
+      <div className={styles.overlay} onClick={handleCloseThankYou}>
+        <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.modalContent}>
+            <div className={styles.successIcon}>😊 ❤️</div>
+            <h2 className={styles.modalTitle}>Terima Kasih!</h2>
+            <p className={styles.modalMessage}>
+              Terima kasih sudah import data hari ini, selamat menjalani kegiatan selanjutnya 😊 ❤️
+            </p>
+            
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                onClick={handleCloseThankYou}
+                className={styles.confirmButton}
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Main Success Modal
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
