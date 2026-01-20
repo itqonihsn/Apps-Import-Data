@@ -115,6 +115,8 @@ export default function ImportForm() {
       const data = await response.json()
 
       if (response.ok) {
+        console.log('[Import] Response data:', data)
+        
         setMessage({
           type: 'success',
           text: `Data berhasil dikirim! Total records: ${data.recordCount}. Menunggu konfirmasi dari server...`,
@@ -122,8 +124,11 @@ export default function ImportForm() {
         
         // Simpan sessionId dan mulai polling
         if (data.sessionId) {
+          console.log('[Import] Starting polling with sessionId:', data.sessionId)
           setSessionId(data.sessionId)
           startPolling(data.sessionId)
+        } else {
+          console.warn('[Import] No sessionId in response!')
         }
         
         // Reset form
@@ -157,6 +162,8 @@ export default function ImportForm() {
 
   // Polling untuk cek status callback
   const startPolling = (id: string) => {
+    console.log('[Polling] Starting polling for sessionId:', id)
+    
     // Clear existing interval
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current)
@@ -165,10 +172,17 @@ export default function ImportForm() {
     // Poll setiap 2 detik
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`/api/import-status?sessionId=${encodeURIComponent(id)}`)
+        const url = `/api/import-status?sessionId=${encodeURIComponent(id)}`
+        console.log('[Polling] Checking status:', url)
+        
+        const response = await fetch(url)
         const data = await response.json()
 
+        console.log('[Polling] Response:', data)
+
         if (data.found && data.status === 'success') {
+          console.log('[Polling] Success detected! Showing modal...')
+          
           // Stop polling
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current)
@@ -180,6 +194,8 @@ export default function ImportForm() {
           setShowSuccessModal(true)
           setSessionId(null)
         } else if (data.found && data.status === 'error') {
+          console.log('[Polling] Error detected!')
+          
           // Stop polling on error
           if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current)
@@ -191,9 +207,11 @@ export default function ImportForm() {
             text: data.message || 'Terjadi kesalahan saat memproses data',
           })
           setSessionId(null)
+        } else if (!data.found) {
+          console.log('[Polling] Status not found yet, continuing...')
         }
       } catch (error) {
-        console.error('Error polling status:', error)
+        console.error('[Polling] Error polling status:', error)
       }
     }, 2000) // Poll every 2 seconds
 

@@ -52,11 +52,17 @@ export default async function handler(
       return res.status(400).json({ found: false, message: 'Session ID required' })
     }
 
+    console.log(`[Status] Looking for sessionId: ${sessionId}`)
+    console.log(`[Status] Available sessionIds:`, Array.from(statusStore.keys()))
+
     const status = statusStore.get(sessionId)
 
     if (!status) {
+      console.log(`[Status] SessionId not found: ${sessionId}`)
       return res.status(200).json({ found: false })
     }
+
+    console.log(`[Status] Found status for sessionId: ${sessionId}`, status)
 
     return res.status(200).json({
       found: true,

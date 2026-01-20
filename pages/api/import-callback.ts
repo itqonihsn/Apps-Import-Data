@@ -38,9 +38,34 @@ export default async function handler(
     })
 
     // Simpan status callback untuk diambil oleh frontend
-    // Jika sessionId tidak ada, generate dari timestamp + platform + brand
-    const sessionId = payload.sessionId || 
-      `${payload.timestamp || Date.now()}-${payload.platform}-${payload.brand}`.replace(/[^a-zA-Z0-9-]/g, '-')
+    // PENTING: sessionId harus match dengan yang di-generate di import.ts
+    // Format: timestamp-platform-brand-branch (sanitized)
+    let sessionId = payload.sessionId
+    
+    if (!sessionId) {
+      // Generate sessionId dengan format yang sama dengan import.ts
+      // Jika timestamp ada, coba parse, jika tidak gunakan Date.now()
+      let timestamp: number
+      if (payload.timestamp) {
+        try {
+          // Coba parse timestamp dari ISO string atau format lain
+          const parsed = new Date(payload.timestamp).getTime()
+          timestamp = isNaN(parsed) ? Date.now() : parsed
+        } catch {
+          timestamp = Date.now()
+        }
+      } else {
+        timestamp = Date.now()
+      }
+      
+      // Format harus sama dengan import.ts: timestamp-platform-brand-branch
+      sessionId = `${timestamp}-${payload.platform}-${payload.brand}-${payload.branch}`.replace(/[^a-zA-Z0-9-]/g, '-')
+      console.log('[Callback] Generated sessionId:', sessionId, 'from timestamp:', timestamp)
+    } else {
+      console.log('[Callback] Using provided sessionId:', sessionId)
+    }
+
+    console.log('[Callback] Saving status with sessionId:', sessionId, 'Status:', payload.status)
 
     saveCallbackStatus(sessionId, payload.status, payload.message, {
       recordCount: payload.recordCount,
