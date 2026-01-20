@@ -10,6 +10,14 @@ interface ImportResponse {
   success?: boolean
   recordCount?: number
   error?: string
+  sessionId?: string
+  metadata?: {
+    platform?: string
+    brand?: string
+    branch?: string
+    dataType?: string
+    timestamp?: string
+  }
 }
 
 export const config = {
