@@ -1,0 +1,12 @@
+curl --location --request POST 'https://apps-import-data.vercel.app/api/import-callback' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "status": "success",
+    "message": "Data sudah masuk dan update ke database",
+    "recordCount": 100,
+    "platform": "Lazada",
+    "brand": "Brighty",
+    "branch": "Brighty Official Store",
+    "dataType": "order",
+    "timestamp": "2025-01-18 12:00:00.000"
+}'

@@ -193,10 +193,26 @@ export default async function handler(
     // n8n akan handle parsing CSV sendiri
     await sendToN8N(fileContent, platform, brand, branch, dataType, csvRecords.length, callbackUrl)
 
-    // Return success response
+    // Generate session ID untuk tracking callback status
+    // Format: timestamp-platform-brand-branch (sanitized)
+    const timestamp = Date.now()
+    const sessionId = `${timestamp}-${platform}-${brand}-${branch}`.replace(/[^a-zA-Z0-9-]/g, '-')
+    
+    console.log(`[Import] Generated sessionId: ${sessionId}`)
+
+    // Return success response dengan sessionId
     return res.status(200).json({
       success: true,
       recordCount: csvRecords.length,
+      sessionId,
+      // Kirim juga metadata untuk n8n callback
+      metadata: {
+        platform,
+        brand,
+        branch,
+        dataType,
+        timestamp: getCurrentTimeWIB(),
+      },
     })
   } catch (error) {
     console.error('API Error:', error)

@@ -1,9 +1,10 @@
 // components/ImportForm.tsx
 'use client'
 
-import { useState, ChangeEvent, FormEvent } from 'react'
+import { useState, ChangeEvent, FormEvent, useEffect, useRef } from 'react'
 import { PLATFORMS, getBrandsByPlatform, getBranchesByPlatformAndBrand } from '@/lib/brandBranchData'
 import ConfirmationModal from './ConfirmationModal'
+import SuccessModal from './SuccessModal'
 import styles from '@/styles/Form.module.css'
 
 interface FormData {
@@ -26,6 +27,10 @@ export default function ImportForm() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [showConfirmation, setShowConfirmation] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [callbackMessage, setCallbackMessage] = useState<string>('')
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const brands = formData.platform ? getBrandsByPlatform(formData.platform) : []
   const branches =
@@ -112,8 +117,15 @@ export default function ImportForm() {
       if (response.ok) {
         setMessage({
           type: 'success',
-          text: `Data berhasil dikirim! Total records: ${data.recordCount}`,
+          text: `Data berhasil dikirim! Total records: ${data.recordCount}. Menunggu konfirmasi dari server...`,
         })
+        
+        // Simpan sessionId dan mulai polling
+        if (data.sessionId) {
+          setSessionId(data.sessionId)
+          startPolling(data.sessionId)
+        }
+        
         // Reset form
         setFormData({
           platform: '',
@@ -141,6 +153,83 @@ export default function ImportForm() {
 
   const handleCancelConfirmation = () => {
     setShowConfirmation(false)
+  }
+
+  // Polling untuk cek status callback
+  const startPolling = (id: string) => {
+    // Clear existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+    }
+
+    // Poll setiap 2 detik
+    pollingIntervalRef.current = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/import-status?sessionId=${encodeURIComponent(id)}`)
+        const data = await response.json()
+
+        if (data.found && data.status === 'success') {
+          // Stop polling
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+
+          // Show success modal
+          setCallbackMessage(data.message || 'Data sudah berhasil masuk ke database dan di update')
+          setShowSuccessModal(true)
+          setSessionId(null)
+        } else if (data.found && data.status === 'error') {
+          // Stop polling on error
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current)
+            pollingIntervalRef.current = null
+          }
+
+          setMessage({
+            type: 'error',
+            text: data.message || 'Terjadi kesalahan saat memproses data',
+          })
+          setSessionId(null)
+        }
+      } catch (error) {
+        console.error('Error polling status:', error)
+      }
+    }, 2000) // Poll every 2 seconds
+
+    // Stop polling after 5 minutes (timeout)
+    setTimeout(() => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+        setSessionId(null)
+        setMessage({
+          type: 'error',
+          text: 'Timeout: Tidak menerima konfirmasi dari server setelah 5 menit',
+        })
+      }
+    }, 5 * 60 * 1000)
+  }
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [])
+
+  const handleImportAgain = () => {
+    setShowSuccessModal(false)
+    setCallbackMessage('')
+    // Reload page untuk reset form
+    window.location.href = 'https://apps-import-data.vercel.app/'
+  }
+
+  const handleCloseSuccessModal = () => {
+    setShowSuccessModal(false)
+    setCallbackMessage('')
   }
 
   return (
@@ -278,6 +367,14 @@ export default function ImportForm() {
         onConfirm={handleConfirmImport}
         onCancel={handleCancelConfirmation}
         isLoading={loading}
+      />
+
+      {/* Success Modal */}
+      <SuccessModal
+        isOpen={showSuccessModal}
+        message={callbackMessage}
+        onImportAgain={handleImportAgain}
+        onClose={handleCloseSuccessModal}
       />
     </div>
   )

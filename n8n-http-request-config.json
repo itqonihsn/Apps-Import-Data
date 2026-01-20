@@ -1,0 +1,29 @@
+{
+  "name": "HTTP Request - Send Callback",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.1,
+  "position": [1000, 300],
+  "parameters": {
+    "method": "POST",
+    "url": "={{ $json.callbackUrl }}",
+    "authentication": "none",
+    "sendHeaders": true,
+    "headerParameters": {
+      "parameters": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
+    "sendBody": true,
+    "bodyParameters": {
+      "parameters": []
+    },
+    "specifyBody": "json",
+    "jsonBody": "={\n  \"status\": \"success\",\n  \"message\": \"Data sudah masuk dan update ke database\",\n  \"recordCount\": {{ $json.recordCount }},\n  \"platform\": \"{{ $json.platform }}\",\n  \"brand\": \"{{ $json.brand }}\",\n  \"branch\": \"{{ $json.branch }}\",\n  \"dataType\": \"{{ $json.dataType }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+    "options": {
+      "timeout": 30000
+    }
+  }
+}
